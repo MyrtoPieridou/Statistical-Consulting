@@ -1,0 +1,122 @@
+---
+title: "Multilevel Mediation Analysis"
+author: "Maria Anthoulaki & Myrto Pieridou"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(lavaan)
+library(lme4)
+library(lmerTest)
+library(MuMIn)
+```
+
+```{r}
+data <- read.csv("data_all_clean.csv")
+```
+
+```{r}
+# optional 
+# standardize the predictor variables so that they are all on the same scale
+data$scaled_IUS_prospective <- scale(data$scaled_IUS_prospective)
+data$response_time_new_mouse_response <- scale(data$response_time_new_mouse_response)
+data$count_trial_seq <- scale(data$count_trial_seq)
+data$correct_choice <- scale(data$correct_choice)
+```
+
+
+
+```{r}
+# Model for the mediator (sampled) as a function of the predictor and Level 1 and Level 2 control variables (Age, Gender)
+
+mediator_model <- lmer(sampled ~ scaled_IUS_prospective + response_time_new_mouse_response + count_trial_seq + correct_choice + AgeInYears + Gender + (1 | PROLIFIC_PID), data = data)
+summary(mediator_model)
+
+```
+
+```{r}
+#  outcome model (x_AG1_scaled) as a function of the mediator (sampled), the Level 1 control variables, and Level 2 variables (Age, Gender)
+
+outcome_model <- lmer(x_AG1_scaled ~ sampled + scaled_IUS_prospective + response_time_new_mouse_response + count_trial_seq + correct_choice + AgeInYears + Gender + (1 | PROLIFIC_PID), data = data)
+summary(outcome_model)
+
+```
+
+```{r}
+AIC(mediator_model)
+AIC(outcome_model)
+BIC(mediator_model)
+BIC(outcome_model)
+```
+
+```{r}
+r.squaredGLMM(mediator_model)
+r.squaredGLMM(outcome_model)
+```
+
+
+```{r warning = FALSE}
+set.seed(123) 
+
+# number of bootstrap samples
+n_boot <- 1000
+
+# initialize vectors
+indirect_effects <- numeric(n_boot)
+direct_effects <- numeric(n_boot)
+total_effects <- numeric(n_boot)
+
+# bootstrapping
+for (i in 1:n_boot) {
+  # sample with replacement
+  boot_data <- data[sample(1:nrow(data), replace = TRUE), ]
+  
+  # mediator model
+  boot_model_mediator <- lmer(sampled ~ scaled_IUS_prospective + 
+                                correct_choice + 
+                              count_trial_seq  + 
+                              response_time_new_mouse_response + 
+                                AgeInYears + 
+                                Gender + (1 | PROLIFIC_PID), 
+                              data = boot_data)
+  
+  # outcome model
+  boot_model_outcome <- lmer(x_AG1_scaled ~ sampled + scaled_IUS_prospective + 
+                             correct_choice + count_trial_seq + 
+                            response_time_new_mouse_response + 
+                             AgeInYears + Gender + 
+                             (1 | PROLIFIC_PID), data = boot_data)
+  
+  # extract coefficients
+  a <- fixef(boot_model_mediator)["scaled_IUS_prospective"]  # effect on mediator
+  b <- fixef(boot_model_outcome)["sampled"]           # effect of mediator on outcome
+  c_prime <- fixef(boot_model_outcome)["scaled_IUS_prospective"] # direct effect on outcome
+  
+  # calculate effects
+  indirect_effects[i] <- a * b        # indirect effect
+  direct_effects[i] <- c_prime        # direct effect
+  total_effects[i] <- indirect_effects[i] + direct_effects[i] # total effect
+  
+  if (i %% 10 == 0) {
+    cat("Iteration", i, "of", n_boot, "completed\n")
+  }
+}
+```
+
+
+```{R}
+# summarize the effects
+indirect_summary <- c(mean = mean(indirect_effects), quantile(indirect_effects, probs = c(0.025, 0.975)))
+direct_summary <- c(mean = mean(direct_effects), quantile(direct_effects, probs = c(0.025, 0.975)))
+total_summary <- c(mean = mean(total_effects), quantile(total_effects, probs = c(0.025, 0.975)))
+
+indirect_summary
+direct_summary
+total_summary
+```
+
+

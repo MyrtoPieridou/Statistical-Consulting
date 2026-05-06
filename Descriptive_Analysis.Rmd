@@ -1,0 +1,205 @@
+---
+title: "Descriptive Anaysis
+author: "Maria Anthoulaki - Myrto Pieridou"
+date: "2024-09-24"
+output: html_document
+---
+
+```{r,echo=false}
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(psych)
+library(corrplot)
+our_data = read.csv('data_all_clean.csv')
+
+#Our data are
+#Outcome :scaled_IUS_prospective:prospective intolerancec            (scaled PIU)
+#sampled:number of tiles turned                                      (information sampling)
+#correct_resp1:actual correct response                               (correct information)
+#correct_choice:whether their final choice was correct or not        (correct choice)
+#x_AG1_scaled: confidence ratings between 0-100                      (confidence)
+```
+
+General Statistics for the response variable (scaled_IUS_prospective) and the predictors we chose.
+
+```{r}
+our_data %>%
+  summarise(
+    mean_IUS_prospective = mean(scaled_IUS_prospective, na.rm = TRUE),   
+    sd_IUS_prospective = sd(scaled_IUS_prospective, na.rm = TRUE),       
+    mean_sampled = mean(sampled, na.rm = TRUE),                          
+    sd_sampled = sd(sampled, na.rm = TRUE),                              
+    mean_confidence = mean(x_AG1_scaled, na.rm = TRUE),                  
+    sd_confidence = sd(x_AG1_scaled, na.rm = TRUE)
+  )
+```
+
+
+Calculate mean of x_AG1_scaled (confidence), sampled and PIU by grouping age  and gender:
+```{r}
+# Create age groups
+data = our_data %>%
+  mutate(AgeGroup = cut(AgeInYears, 
+                        breaks = c(0, 18, 30, 40, 50, 60, 70, Inf), 
+                        labels = c("0-18", "19-30", "31-40", "41-50", "51-60", "61-70", "70+"),
+                        right = FALSE))
+
+# Calculate mean of x_AG1_scaled by age group and gender
+age_gender_stats = data %>%
+  group_by(AgeGroup, Gender) %>%
+  summarise(
+    Count = n(),
+    MeanConfidence = mean(x_AG1_scaled, na.rm = TRUE),
+    MeanSampled=mean(sampled,na.rm=TRUE),
+    MeanPIU=mean(scaled_IUS_prospective,na.rm=TRUE),
+    .groups = 'drop'
+  )
+
+# Print the summary table
+print(age_gender_stats)
+```
+
+Calculate mean of x_AG1_scaled (confidence), sampled and PIU by grouping the Profilic_Pic (ID of each one)
+```{r}
+# Descriptive statistics grouped by subject (PROLIFIC_PIC)
+data = our_data %>%
+  group_by(PROLIFIC_PID) %>%
+  summarise(
+    mean_IUS_prospective = mean(scaled_IUS_prospective, na.rm = TRUE),
+    mean_sampled = mean(sampled, na.rm = TRUE),
+    mean_confidence = mean(x_AG1_scaled, na.rm = TRUE)
+  )%>%
+  arrange(desc(mean_confidence))
+
+# Print the summary table
+print(data)
+```
+
+Check how PIU is connected with the number of tiles the individuals open.
+
+```{r}
+data_PIU = our_data %>%
+  group_by(PROLIFIC_PID) %>%
+    summarise(
+    mean_IUS_prospective = mean(scaled_IUS_prospective, na.rm = TRUE),
+    mean_sampled = mean(sampled, na.rm = TRUE),
+    mean_confidence = mean(x_AG1_scaled, na.rm = TRUE))%>% arrange(desc(mean_confidence))
+
+
+data_PIU[which(data_PIU$mean_IUS_prospective >= 1.5),]
+```
+
+
+
+Then, we did some visualizations:
+
+1) Box plot for confidence ratings (x_AG1_scaled) grouped by whether the final choice was correct     (correct_choice)
+
+```{r}
+ggplot(our_data, aes(x = factor(correct_choice), y = x_AG1_scaled)) +
+  geom_boxplot(fill = "lightgreen", color = "black") +
+  labs(title = "Confidence Ratings by Correct Choice", 
+       x = "Correct Choice (0 = Incorrect, 1 = Correct)", 
+       y = "Confidence Ratings (Scaled)") +
+  theme_minimal()
+```
+
+
+
+
+2) Scatter plot of confidence ratings (x_AG1_scaled) by number of tiles sampled
+
+```{r}
+ggplot(our_data, aes(x = sampled, y = x_AG1_scaled)) +
+  geom_point(alpha = 0.5, color = "red") +
+  labs(title = "Scatter Plot of Confidence Ratings vs. Number of Tiles Sampled", 
+       x = "Number of Tiles Sampled", y = "Confidence Ratings (Scaled)") +
+  theme_minimal()
+```
+
+3) Plot the correlation between numeric variables in the dataset
+```{r}
+#Cretae the correaltion matrix
+numeric_data = our_data %>% select(scaled_IUS_prospective, sampled, correct_choice, x_AG1_scaled)
+correlation_matrix = cor(numeric_data, use = "complete.obs")
+corrplot(correlation_matrix, method = "circle", type = "upper", tl.cex = 0.8)
+```
+4) Histograms of PIU, sampled and confidence
+```{r}
+# Histogram for scaled_IUS_prospective
+hist(data$mean_IUS_prospective, 
+     main = "Histogram of scaled_IUS_prospective", 
+     xlab = "PIU Score", 
+     col = "lightblue", 
+     border = "black")
+
+# Histogram for sampled (information sampling)
+hist(data$mean_sampled, 
+     main = "Histogram of Information Sampling (sampled)", 
+     xlab = "Number of Tiles Turned", 
+     col = "lightgreen", 
+     border = "black")
+
+
+# Histogram for x_AG1_scaled (confidence ratings)
+hist(data$mean_confidence, 
+     main = "Histogram of Confidence Ratings (x_AG1_scaled)", 
+     xlab = "Confidence (0-100)", 
+     col = "lightcoral", 
+     border = "black")
+
+```
+
+5) Visualize the confidence of random people to check if we see strange patterns
+```{r}
+set.seed(123)  # Set seed for reproducibility (optional)
+random_clients = sample(unique(our_data$PROLIFIC_PID),20)
+
+person_sp = function(client){
+
+person = our_data[which(our_data$PROLIFIC_PID == client), 
+c("scaled_IUS_prospective", "sampled", "x_AG1_scaled", "correct_choice", "count_trial_seq")]
+person = person %>% arrange(count_trial_seq)
+sampled = person$sampled
+correct_choice = person$correct_choice
+PIU = person$scaled_IUS_prospective[1]
+
+  
+  
+plot = ggplot(data = person, aes(x = count_trial_seq, y = x_AG1_scaled)) +
+    geom_point() +                         
+    geom_line(color = "blue") +           
+    labs(x = "Count_Trial_Seq", y = "x_AG1 Scaled") + 
+    theme_minimal() +                     
+    ggtitle("Scatter Plot of Count_Trial_Seq vs. x_AG1 Scaled") 
+  return(list(sampled = sampled, corect_choice = correct_choice, PIU = PIU,plot=plot))
+}
+
+person_sp("63bd83108d280e9d55d5e33d")
+person_sp("64467f4be788c4d0c4d5ff33")
+person_sp("63d7f37272879efbbf72dfb0")
+person_sp("5a6759ad35f26b0001496694")
+person_sp("6400da6aae94a6b881964711")
+person_sp("63d3fb12ac52371a49e65860")
+person_sp("5e8cb846e94a4406307d6da2")
+person_sp("611d2cc49af322d296ac4117")
+person_sp("5da41f84a39c100018614e31")
+person_sp("6447a4bd54ab5cb19fd4beab")
+person_sp("6400d8ee84822ae55ab5c542")
+person_sp("5892537355550f0001509c35")
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+

@@ -1,0 +1,150 @@
+---
+title: "Statistical Consulting_Multilevel SEM"
+author: "Myrto Piedou - s3841898"
+date: "2024-11-11"
+output: pdf_document
+editor_options: 
+  markdown: 
+    wrap: 72
+---
+
+In this R file, we are going to do the analysis:
+
+1)  Multilevel Structural Equation Modeling
+
+
+GOAL: See if scaled_IUS_prospective (PIU) and x_AG1_scaled (confidence)
+are mediated by sampled (information sampling)
+
+```{r setup}
+library(lavaan) 
+library(psych)
+library(ggplot2)
+library(semPlot)
+library(dplyr)
+library(lme4)
+library(mediation)
+
+
+#Read the data
+data = read.csv('C:/Users/myrto/OneDrive/Desktop/2nd year/Statistical Consulting/statisticalConsulting_docs/data_all_clean.csv')
+```
+
+Firstly, we are going to modify the dataset and select the variables
+that we believe are important for the analyses.
+
+```{r}
+#Select the variables we decided that are important for the analysis
+vars = c("PROLIFIC_PID",
+         "sampled",
+         "scaled_IUS_prospective",
+         "x_AG1_scaled",
+         "correct_choice",
+         "count_trial_seq",
+         "response_time_new_mouse_response",
+         "AgeInYears", 
+         "Gender")
+
+our_data=data[,vars]
+#print(our_data)
+```
+
+Chosen variables:
+
+-> Profilic_PID = profile of each candidate sampled = number of tiles
+-> turned (information sampling) scaled_IUS_prospective = PIU scaled
+-> x_AG1_scaled = confidence ratings correct_choice = if their choice was
+-> correct in each trial count_trial_seq = number of trial
+-> response_time_new_mouse_response = seconds until he/she fill his/her
+-> confidence 
+-> AgeInYears = age 
+-> gender = gender
+
+
+
+
+1)  Multilevel Structural Equation Modeling:
+
+Firstly we built the model with the 2 levels, which shows mediation between PIU and Confidence. This is the indirect path.
+```{r}
+# Define the SEM model in lavaan format
+
+model = '
+  # Level 1 (Within Subjects)  metaxi trials idiou atomou
+  x_AG1_scaled ~ b1 * sampled + b2 * response_time_new_mouse_response + b3 * count_trial_seq + b4 * correct_choice
+  
+  # Level 2 (Between Subjects) metaxi atoma
+  sampled ~ a1 * scaled_IUS_prospective + a2 * AgeInYears + a3 * Gender
+
+  # Mediation
+  indirect := a1 * b1
+'
+
+# Fit the model using lavaan with bootstrapping for indirect effects
+fit = sem(model, data = our_data, cluster = "PROLIFIC_PID", se = "bootstrap", bootstrap = 100)
+summary(fit, standardized = TRUE, fit.measures = TRUE)
+
+
+```
+Secondly, we built the model with the direct effect of PIU in confidence 
+```{r}
+# Define the SEM model in lavaan format
+
+model_1 = '
+  # Level 1 (Within Subjects)  metaxi trials idiou atomou
+  x_AG1_scaled ~ b1 * sampled + b2 * response_time_new_mouse_response + b3 * count_trial_seq + b4 *correct_choice + b5 * scaled_IUS_prospective + b6 * AgeInYears + b7 * Gender
+  
+
+  # Mediation
+  indirect := b7
+'
+
+# Fit the model using lavaan with bootstrapping for indirect effects
+fit = sem(model, data = our_data, cluster = "PROLIFIC_PID", se = "bootstrap", bootstrap = 100)
+summary(fit, standardized = TRUE, fit.measures = TRUE)
+
+```
+
+
+
+
+```{r}
+#comparison between 2 models. For the one the response time is linear, for the other is cubic
+
+# Linear Model
+model_linear = '
+  # Level 1 (Within Subjects) metaxi trials idiou atomou
+  x_AG1_scaled ~ b1 * sampled + b2 * response_time_new_mouse_response + b3 * count_trial_seq + b4 * correct_choice
+  
+  # Level 2 (Between Subjects) metaxi atoma
+  sampled ~ a1 * scaled_IUS_prospective + a2 * AgeInYears + a3 * Gender
+
+  # Mediation
+  indirect := a1 * b1
+'
+
+# Cubic Model
+model_cubic = '
+  # Level 1 (Within Subjects) metaxi trials idiou atomou
+  x_AG1_scaled ~ b1 * sampled + b2 * response_time_new_mouse_response + b3 * count_trial_seq^3 + b4 * correct_choice
+  
+  # Level 2 (Between Subjects) metaxi atoma
+  sampled ~ a1 * scaled_IUS_prospective + a2 * AgeInYears + a3 * Gender
+
+  # Mediation
+  indirect := a1 * b1
+'
+
+fit_linear = sem(model_linear, data = our_data, cluster = "PROLIFIC_PID", se = "bootstrap", bootstrap = 100)
+fit_cubic = sem(model_cubic, data = our_data, cluster = "PROLIFIC_PID", se = "bootstrap", bootstrap = 100)
+
+anova(fit_linear, fit_cubic)
+
+
+```
+
+
+
+
+
+
