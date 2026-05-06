@@ -13,8 +13,9 @@ This repository contains the statistical analysis and research findings for a st
 # Experimental Methodology
 Participants completed 60 trials of a "game" where they flipped gray squares in a 5x5 grid to determine the majority color.
 
-
-
+# Academic Context
+Institution: Leiden University 
+Team members: Myrto Pieridou, Maria Anthoulaki
 
 
 
